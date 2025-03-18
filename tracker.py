@@ -6,20 +6,76 @@ Usage:
     python tracker.py --protocol silo
     python tracker.py --supported
     python tracker.py --protocol all
+    python tracker.py --protocol silo --chain sonic
+    python tracker.py --protocol silo --token-pair USDC.E
+    python tracker.py --protocol silo --pool-id <pool_id>
 """
 
 import sys
 from src.cli import parse_arguments
 from src.protocols import get_protocol_instance, get_supported_protocols
 from src.utils.formatter import format_tvl_output
+from src.config import get_config
 
 def display_supported_protocols():
     """Display the list of supported protocols."""
     protocols = get_supported_protocols()
     print("Supported DeFi Protocols:")
     for protocol, providers in protocols.items():
+        # Get additional information from config if available
+        protocol_config = get_config("protocol", protocol, {})
+        defillama_slug = protocol_config.get("defillama_slug", "N/A")
+        
         print(f"  - {protocol} (Providers: {', '.join(providers)})")
-    print("\nUsage: python tracker.py --protocol <protocol_name> [--provider <provider_name>]")
+    
+def merge_tvl_data(data_list):
+    """
+    Merge multiple TVL data responses into a single result.
+    
+    Args:
+        data_list: List of TVL data responses
+        
+    Returns:
+        Merged TVL data
+    """
+    merged_result = {
+        "status": "success",
+        "count": 0,
+        "data": []
+    }
+    
+    # Get all protocol configurations
+    protocol_configs = get_config("protocol", "", {})
+    
+    for data in data_list:
+        # Handle the new format with status and data fields
+        if isinstance(data, dict) and "status" in data and "data" in data:
+            if data["status"] == "success" and data["data"]:
+                merged_result["data"].extend(data["data"])
+                merged_result["count"] += len(data["data"])
+        # Handle the old format (dictionary of pool data)
+        elif isinstance(data, dict):
+            for pool_id, pool_data in data.items():
+                protocol_slug = None
+                
+                # Find the correct protocol config
+                for proto_key, proto_config in protocol_configs.items():
+                    if proto_config.get("defillama_project", "").lower() == pool_data.get("protocol", "").lower():
+                        protocol_slug = proto_config.get("defillama_slug", "")
+                        break
+                
+                merged_result["data"].append({
+                    "protocol": pool_data.get("protocol", "N/A"),
+                    "protocol_slug": protocol_slug,
+                    "chain": pool_data.get("chain", "N/A"),
+                    "pool_name": pool_data.get("token_pair", "N/A"),
+                    "tvl": pool_data.get("tvl_usd", 0) / 1e6 if isinstance(pool_data.get("tvl_usd"), (int, float)) else 0,
+                    "apy": pool_data.get("apy", 0),
+                    "provider": pool_data.get("provider", "N/A")
+                })
+                merged_result["count"] += 1
+    
+    return merged_result
 
 def main():
     """Main function to run the TVL tracker."""
@@ -27,36 +83,50 @@ def main():
     
     if args.supported:
         display_supported_protocols()
-        return
+        return 0
     
     # Get TVL data for the specified protocol(s)
-    if args.protocol == "all":
-        # Get data for all protocols
-        tvl_data = {}
-        supported_protocols = get_supported_protocols()
-        for protocol_name in supported_protocols:
-            try:
-                protocol = get_protocol_instance(protocol_name, args.provider)
-                protocol_data = protocol.get_tvl(args.token_pair)
-                tvl_data.update(protocol_data)
-            except Exception as e:
-                print(f"Error fetching TVL data for {protocol_name}: {str(e)}")
-    else:
+    all_tvl_data = []
+    
+    try:
+        # Get all configured protocols
+        protocol_configs = get_config("protocol", "", {})
+        # Check if the protocol is in our config
+        if args.protocol not in protocol_configs:
+            print(f"Error: Protocol '{args.protocol}' is not configured. Use --supported to see available protocols.")
+            return 1
+            
         # Get data for a specific protocol
         try:
             protocol = get_protocol_instance(args.protocol, args.provider)
-            tvl_data = protocol.get_tvl(args.token_pair)
+            # Check if the protocol has the new chain parameter support
+            if hasattr(protocol, 'get_tvl') and 'chain' in protocol.get_tvl.__code__.co_varnames:
+                tvl_data = protocol.get_tvl(args.pool, args.chain)
+                all_tvl_data.append(tvl_data)
+            else:
+                # Fall back to old method
+                tvl_data = protocol.get_tvl(args.pool)
+                all_tvl_data.append(tvl_data)
+            
         except Exception as e:
             print(f"Error fetching TVL data for {args.protocol}: {str(e)}")
-            tvl_data = {}
+        
+        # Merge all results
+        merged_result = merge_tvl_data(all_tvl_data)
+        
+        # Format and display the TVL data
+        if merged_result["data"]:
+            # Format the output using the formatter module
+            formatted_output = format_tvl_output(merged_result, output_format=args.output)
+            print(formatted_output)
+        else:
+            print("No TVL data available.")
+        
+        return 0
     
-    # Format and display the TVL data
-    if tvl_data:
-        # Format the output using the formatter module
-        formatted_output = format_tvl_output(tvl_data, output_format=args.output)
-        print(formatted_output)
-    else:
-        print("No TVL data available.")
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

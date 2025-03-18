@@ -5,6 +5,7 @@ Command Line Interface module for DeFi TVL Tracker.
 import argparse
 from typing import Dict, Any
 from src.protocols import get_supported_protocols
+from src.config import get_config
 
 def parse_arguments() -> Dict[str, Any]:
     """
@@ -25,8 +26,8 @@ def parse_arguments() -> Dict[str, Any]:
     
     group.add_argument(
         "--protocol", "-p",
-        help="Specify protocol to track TVL (or 'all' for all supported protocols)",
-        choices=list(supported_protocols.keys()) + ["all"]
+        help="Specify protocol to track TVL",
+        choices=list(supported_protocols.keys())
     )
     
     group.add_argument(
@@ -39,13 +40,20 @@ def parse_arguments() -> Dict[str, Any]:
     parser.add_argument(
         "--provider",
         help="Specify data provider (defaults to protocol's preferred provider)",
-        choices=["defillama", "subgraph", "web3", "web"],
+        choices=["defillama"],
+        # choices=["defillama", "subgraph", "web3", "web"],
         default=None
     )
     
     parser.add_argument(
-        "--token-pair",
-        help="Filter by specific token pair (e.g., 'S-USDC.e')",
+        "--pool", "-pl",
+        help="Filter by specific pool name (e.g., 'S-USDC.e')",
+        default=None
+    )
+    
+    parser.add_argument(
+        "--chain",
+        help="Filter by specific blockchain (e.g., 'sonic', 'ethereum')",
         default=None
     )
     
@@ -54,6 +62,12 @@ def parse_arguments() -> Dict[str, Any]:
         choices=["table", "json", "csv"],
         default="table",
         help="Output format (default: table)"
+    )
+    
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Disable caching and fetch fresh data"
     )
     
     return parser.parse_args()
