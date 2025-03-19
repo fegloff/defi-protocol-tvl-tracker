@@ -14,7 +14,6 @@ Usage:
 import sys
 from src.cli import parse_arguments
 from src.protocols import get_protocol_instance, get_supported_protocols
-from src.utils.formatter import format_tvl_output
 from src.config import get_config
 
 def display_supported_protocols():
@@ -99,26 +98,22 @@ def main():
         # Get data for a specific protocol
         try:
             protocol = get_protocol_instance(args.protocol, args.provider)
-            # Check if the protocol has the new chain parameter support
-            if hasattr(protocol, 'get_tvl') and 'chain' in protocol.get_tvl.__code__.co_varnames:
-                tvl_data = protocol.get_tvl(args.pool, args.chain)
-                all_tvl_data.append(tvl_data)
-            else:
-                # Fall back to old method
-                tvl_data = protocol.get_tvl(args.pool)
-                all_tvl_data.append(tvl_data)
-            
+            tvl_data = protocol.get_tvl(args.pool, args.chain)
+            all_tvl_data.append(tvl_data)
         except Exception as e:
             print(f"Error fetching TVL data for {args.protocol}: {str(e)}")
         
         # Merge all results
         merged_result = merge_tvl_data(all_tvl_data)
         
-        # Format and display the TVL data
+        # Format and display the TVL data using the protocol's format_output method
         if merged_result["data"]:
-            # Format the output using the formatter module
-            formatted_output = format_tvl_output(merged_result, output_format=args.output)
-            print(formatted_output)
+            if protocol:
+                formatted_output = protocol.format_output(merged_result, output_format=args.output)
+                print(formatted_output)
+            else:
+                # This should never happen since we check if the protocol exists above
+                print("No protocol instance available to format output.")
         else:
             print("No TVL data available.")
         

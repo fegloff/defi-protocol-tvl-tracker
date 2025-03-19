@@ -14,6 +14,15 @@ API_CONFIG = {
     "subgraph": {
         "base_url": "https://api.thegraph.com/subgraphs/name/",
         "timeout": 30  # seconds
+    },
+    "kingdom_subgraph": {
+        "base_url": "https://sonic.kingdomsubgraph.com/subgraphs/name/exp",
+        "timeout": 30,  # seconds
+        "headers": {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "DeFi-TVL-Tracker/1.0"
+        }
     }
 }
 
@@ -23,30 +32,45 @@ PROTOCOL_CONFIG = {
         "defillama_slug": "silo-finance",
         "defillama_project": "silo-v2",
         "web_url": "https://v2.silo.finance",
-        "subgraph_id": None,
-        "contract_address": None
     },
     "aave": {
         "defillama_slug": "morpho-aavev3",
         "defillama_project": "aave-v3",
         "web_url": "https://aavev3.morpho.org/",
-        "subgraph_id": None,
-        "contract_address": None
     },
-     "beets": {
+    "beets": {
         "defillama_slug": "beets-lst",
         "defillama_project": "beets-dex",
         "web_url": "https://beets.fi",
-        "subgraph_id": None,
-        "contract_address": None
     },
-     "curve": {
+    "curve": {
         "defillama_slug": "curve-dex",
         "defillama_project": "curve-dex",
         "web_url": "https://curve.fi",
-        "subgraph_id": None,
-        "contract_address": None
     },
+    "pendle": {
+        "defillama_slug": "pendle",
+        "defillama_project": "pendle",
+        "web_url": "https://curve.fi",
+    },
+    "shadow": {
+        "defillama_slug": None,
+        "defillama_project": None,
+        "web_url": "https://www.shadow.so",
+        "kingdom_subgraph": {
+            "entity_type": "clPools",
+            "default_filters": {
+                "symbol_contains": "USD"
+            },
+            "field_mapping": {
+                "tvl": "totalValueLockedUSD",
+                "volume": "volumeUSD",
+                "name": "symbol"
+            }
+        },
+        "supported_providers": ["kingdom_subgraph"],
+        "default_provider": "kingdom_subgraph"
+    }
 }
 
 # Get configuration value with fallback
@@ -66,8 +90,8 @@ def get_config(section: str, key: str, default: Any = None) -> Any:
         return API_CONFIG.get(key, {})
     elif section == "protocol":
         if not key:
-          return PROTOCOL_CONFIG
+            return PROTOCOL_CONFIG
         else:
-          return PROTOCOL_CONFIG.get(key, {})
+            return PROTOCOL_CONFIG.get(key, {})
     else:
         return default
