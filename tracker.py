@@ -22,8 +22,7 @@ def display_supported_protocols():
     print("Supported DeFi Protocols:")
     for protocol, providers in protocols.items():
         # Get additional information from config if available
-        protocol_config = get_config("protocol", protocol, {})
-        defillama_slug = protocol_config.get("defillama_slug", "N/A")
+        # protocol_config = get_config("protocol", protocol, {})
         
         print(f"  - {protocol} (Providers: {', '.join(providers)})")
     
@@ -99,6 +98,7 @@ def main():
         try:
             protocol = get_protocol_instance(args.protocol, args.provider)
             tvl_data = protocol.get_tvl(args.pool, args.chain)
+            print('FCO::::: tvl_data', args.pool, args.chain, tvl_data)
             all_tvl_data.append(tvl_data)
         except Exception as e:
             print(f"Error fetching TVL data for {args.protocol}: {str(e)}")

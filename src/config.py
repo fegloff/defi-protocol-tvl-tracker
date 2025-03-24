@@ -4,7 +4,11 @@ Configuration settings for DeFi TVL Tracker.
 
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
 
+load_dotenv()
+
+print('FCO::::  "api_key": os.environ.get("GRAPH_API_KEY") ', os.environ.get("GRAPH_API_KEY") )
 # API configurations
 API_CONFIG = {
     "defillama": {
@@ -23,11 +27,38 @@ API_CONFIG = {
             "Accept": "application/json",
             "User-Agent": "DeFi-TVL-Tracker/1.0"
         }
+    },
+    "swapx_subgraph": {
+        "base_url": "https://gateway.thegraph.com/api/subgraphs/id/Gw1DrPbd1pBNorCWEfyb9i8txJ962qYqqPtuyX6iEH8u",
+        "timeout": 30,  # seconds
+        "headers": {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "DeFi-TVL-Tracker/1.0"
+        },
+        "api_key": os.environ.get("GRAPH_API_KEY")  # Name of environment variable for API key
     }
 }
 
 # Protocol configurations and mappings
 PROTOCOL_CONFIG = {
+    "swapx": {
+        "defillama_slug": None,
+        "defillama_project": None,
+        "web_url": "https://swapx.fi",
+        "swapx_subgraph": {
+            "entity_type": "ichiVaults",
+            "default_filters": {
+                "totalValue_gt": 0
+            },
+            "field_mapping": {
+                "tvl": "totalValue",
+                "name": "name"
+            }
+        },
+        "supported_providers": ["swapx_subgraph"],
+        "default_provider": "swapx_subgraph"
+    },
     "silo": {
         "defillama_slug": "silo-finance",
         "defillama_project": "silo-v2",
@@ -51,25 +82,28 @@ PROTOCOL_CONFIG = {
     "pendle": {
         "defillama_slug": "pendle",
         "defillama_project": "pendle",
-        "web_url": "https://curve.fi",
+        "web_url": "https://pendle.finance/",
     },
-    "shadow": {
-        "defillama_slug": None,
-        "defillama_project": None,
-        "web_url": "https://www.shadow.so",
-        "kingdom_subgraph": {
-            "entity_type": "clPools",
-            "default_filters": {
-                "symbol_contains": "USD"
-            },
+    "euler": {
+        "defillama_slug": "euler-v2",
+        "defillama_project": "euler-v2",
+        "web_url": "https://www.euler.finance",
+    },
+   "swapx": {
+        "defillama_slug": "swapx",
+        "defillama_project": "swapx",
+        "web_url": "https://swapx.fi",
+        "swapx_subgraph": {
+            "entity_type": "ichiVaults",
+            "default_filters": {},
             "field_mapping": {
-                "tvl": "totalValueLockedUSD",
-                "volume": "volumeUSD",
-                "name": "symbol"
+                "tvl": "value",
+                "tokenA": "tokenA.symbol",
+                "tokenB": "tokenB.symbol"
             }
         },
-        "supported_providers": ["kingdom_subgraph"],
-        "default_provider": "kingdom_subgraph"
+        "supported_providers": ["swapx_subgraph", "defillama"],
+        "default_provider": "swapx_subgraph"
     }
 }
 

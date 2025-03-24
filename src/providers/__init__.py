@@ -37,6 +37,9 @@ def get_provider(provider_name: str, **kwargs) -> Any:
     elif provider_name == "kingdom_subgraph":
         from .kingdom_subgraph import KingdomSubgraphProvider
         return KingdomSubgraphProvider(**kwargs)
+    elif provider_name == "swapx_subgraph":
+        from .swapx_subgraph import SwapxSubgraphProvider
+        return SwapxSubgraphProvider(**kwargs)
     else:
         raise ValueError(f"Unsupported provider: {provider_name}")
 
