@@ -4,6 +4,7 @@ Base protocol class that defines the interface for all protocol implementations.
 
 from typing import Dict, Any, Optional, List
 from src.config import get_config
+from src.providers import get_provider
 
 class ProtocolBase:
     """Base class for all protocol implementations."""
@@ -21,7 +22,7 @@ class ProtocolBase:
         Args:
             provider_name: Name of the provider to use (defaults to DEFAULT_PROVIDER)
         """
-        # Set the protocol identifier (overridden by subclasses)
+        # Set the protocol identifier (overridden by subclasses if needed)
         self.protocol_id = self.__class__.__name__.lower().replace('protocol', '')
         
         # Get protocol configuration
@@ -37,28 +38,8 @@ class ProtocolBase:
                 f"Supported providers: {', '.join(self.SUPPORTED_PROVIDERS)}"
             )
         
-        # Initialize the provider
-        self.provider = self._get_provider()
-    
-    def _get_provider(self):
-        """
-        Get the provider instance.
-        
-        Returns:
-            Provider instance
-        """
-        if self.provider_name == "defillama":
-            from src.providers.defillama import DefiLlamaProvider
-            return DefiLlamaProvider()
-        # TO DO
-        # elif self.provider_name == "subgraph":
-        #     from src.providers.subgraph import SubgraphProvider
-        #     return SubgraphProvider()
-        # elif self.provider_name == "web":
-        #     from src.providers.web import WebProvider
-        #     return WebProvider()
-        else:
-            raise ValueError(f"Unknown provider: {self.provider_name}")
+        # Initialize the provider using the registry
+        self.provider = get_provider(self.provider_name)
     
     def get_tvl(self, token_pair: Optional[str] = None, chain: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -78,19 +59,21 @@ class ProtocolBase:
         # Fallback implementation
         raise NotImplementedError(f"Provider {self.provider_name} does not implement get_protocol_tvl method")
     
-    def get_specific_pool_tvl(self, pool_id: str) -> Dict[str, Any]:
+    def format_output(self, tvl_data: Dict[str, Any], output_format: str = "table") -> str:
         """
-        Get TVL data for a specific pool.
+        Format the TVL data for output.
         
         Args:
-            pool_id: Pool ID to get TVL for
+            tvl_data: TVL data to format
+            output_format: Output format (table, json, csv)
             
         Returns:
-            Dict containing TVL data for the specific pool
+            Formatted output string
         """
-        # Let the provider handle the data fetching logic
-        if hasattr(self.provider, 'get_pool_tvl'):
-            return self.provider.get_pool_tvl(self.protocol_id, pool_id)
+        # Use the provider's format_output method if available
+        if hasattr(self.provider, 'format_output'):
+            return self.provider.format_output(tvl_data, output_format)
         
-        # Fallback implementation
-        raise NotImplementedError(f"Provider {self.provider_name} does not implement get_pool_tvl method")
+        # Fallback to the formatter utility
+        from src.utils.formatter import format_tvl_output
+        return format_tvl_output(tvl_data, output_format)

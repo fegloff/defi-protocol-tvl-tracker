@@ -32,7 +32,6 @@ def get_supported_protocols() -> Dict[str, List[str]]:
     # Get all protocols from config
     protocol_config = get_config("protocol", None)
     result = {}
-    
     # Loop through protocol modules and import them to get their supported providers
     for protocol_name in protocol_config.keys():
         try:

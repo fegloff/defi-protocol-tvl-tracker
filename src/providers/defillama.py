@@ -2,15 +2,13 @@
 DefiLlama API provider for fetching TVL data with local file caching.
 """
 
-import os
-import json
-import time
 import requests
 from typing import Dict, Any, Optional, List, Union
 from urllib.parse import urljoin
 from src.config import get_config
+from src.providers.provider_base import ProviderBase
 
-class DefiLlamaProvider:
+class DefiLlamaProvider(ProviderBase):
     """Provider for DefiLlama API with local file caching for pools data."""
     
     def __init__(self, cache_ttl: int = 3600, cache_dir: Optional[str] = None):
@@ -21,6 +19,9 @@ class DefiLlamaProvider:
             cache_ttl: Time-to-live for cached data in seconds (default: 1 hour)
             cache_dir: Directory to store cache files (default: ~/.defi-tvl-cache)
         """
+        # Call parent constructor first
+        super().__init__(cache_ttl, cache_dir)
+        
         # Get API configuration
         defillama_config = get_config("api", "defillama", {})
         self.base_url = defillama_config.get("base_url", "https://api.llama.fi/")
@@ -31,14 +32,6 @@ class DefiLlamaProvider:
             "Accept": "application/json",
             "User-Agent": "DeFi-TVL-Tracker/1.0"
         }
-        
-        # Cache settings
-        self.cache_ttl = cache_ttl
-        self.cache_dir = cache_dir or os.path.expanduser("~/.defi-tvl-cache")
-        
-        # Ensure cache directory exists
-        if not os.path.exists(self.cache_dir):
-            os.makedirs(self.cache_dir)
     
     def _make_request(self, base: str, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
@@ -62,67 +55,6 @@ class DefiLlamaProvider:
             return response.json()
         except requests.exceptions.RequestException as e:
             raise Exception(f"DefiLlama API request failed: {str(e)}")
-    
-    def _get_cache_path(self, cache_key: str) -> str:
-        """
-        Get the file path for a cache item.
-        
-        Args:
-            cache_key: Unique key for the cache item
-            
-        Returns:
-            File path for the cache item
-        """
-        return os.path.join(self.cache_dir, f"{cache_key}.json")
-    
-    def _get_cached_data(self, cache_key: str) -> Optional[Dict[str, Any]]:
-        """
-        Get data from cache if it exists and is not expired.
-        
-        Args:
-            cache_key: Unique key for the cache item
-            
-        Returns:
-            Cached data or None if not found or expired
-        """
-        cache_path = self._get_cache_path(cache_key)
-        
-        if not os.path.exists(cache_path):
-            return None
-        
-        try:
-            with open(cache_path, 'r') as f:
-                cache_data = json.load(f)
-                
-            # Check if cache is expired
-            if time.time() - cache_data.get("timestamp", 0) > self.cache_ttl:
-                return None
-                
-            return cache_data.get("data")
-        except (json.JSONDecodeError, KeyError, IOError):
-            # If any error occurs, return None to fetch fresh data
-            return None
-    
-    def _save_to_cache(self, cache_key: str, data: Dict[str, Any]) -> None:
-        """
-        Save data to cache.
-        
-        Args:
-            cache_key: Unique key for the cache item
-            data: Data to cache
-        """
-        cache_path = self._get_cache_path(cache_key)
-        
-        cache_data = {
-            "timestamp": time.time(),
-            "data": data
-        }
-        
-        try:
-            with open(cache_path, 'w') as f:
-                json.dump(cache_data, f)
-        except IOError as e:
-            print(f"Warning: Failed to write to cache: {str(e)}")
     
     def _get_protocol_config(self, protocol_id: str) -> Dict[str, Any]:
         """
@@ -212,37 +144,6 @@ class DefiLlamaProvider:
             result["status"] = "error"
             
         return result
-    
-    def get_pool_tvl(self, protocol_id: str, pool_id: str) -> Dict[str, Any]:
-        """
-        Get TVL data for a specific pool.
-        
-        Args:
-            protocol_id: Protocol ID
-            pool_id: Pool ID
-            
-        Returns:
-            TVL data for the specific pool
-        """
-        # Get protocol configuration
-        protocol_config = self._get_protocol_config(protocol_id)
-        
-        # Get DefiLlama specific identifiers
-        defillama_project = protocol_config.get("defillama_project", protocol_id)
-        
-        # Get all pools for the protocol
-        all_pools = self.get_pools(defillama_project)
-        
-        # Filter for the specific pool ID
-        filtered_data = []
-        if all_pools.get("status") == "success" and "data" in all_pools:
-            filtered_data = [pool for pool in all_pools["data"] if pool.get("pool_id") == pool_id]
-        
-        return {
-            "status": "success" if filtered_data else "no_data",
-            "count": len(filtered_data),
-            "data": filtered_data
-        }
     
     def get_pools(self, protocol: Optional[str] = None, chain: Optional[str] = None, 
                  pool_name: Optional[str] = None) -> Dict[str, Any]:
@@ -357,25 +258,154 @@ class DefiLlamaProvider:
                 
         return protocol_info
     
-    def get_all_protocols(self) -> Dict[str, Any]:
+    def format_output(self, tvl_data: Union[Dict[str, Any], List[Dict[str, Any]]], 
+                     output_format: str = "table") -> str:
         """
-        Get list of all protocols tracked by DefiLlama.
+        Format TVL data for display.
         
-        Returns:
-            All protocols tracked by DefiLlama
-        """
-        cache_key = "all_protocols"
-        
-        # Try to get data from cache
-        all_protocols = self._get_cached_data(cache_key) if self.cache_ttl > 0 else None
-        
-        # If not in cache or cache disabled, fetch from API
-        if not all_protocols:
-            endpoint = "protocols"
-            all_protocols = self._make_request(self.base_url, endpoint)
+        Args:
+            tvl_data: TVL data to format (either a dict or list of dicts)
+            output_format: Output format (table, json, csv)
             
-            # Save to cache
-            if self.cache_ttl > 0:
-                self._save_to_cache(cache_key, all_protocols)
+        Returns:
+            Formatted output string
+        """
+        import json
+        import csv
+        import io
+        
+        try:
+            from tabulate import tabulate
+        except ImportError:
+            # Fallback for when tabulate is not available
+            def tabulate(data, headers, tablefmt):
+                output = []
+                # Add headers
+                output.append("  ".join(headers))
+                output.append("-" * (sum(len(h) for h in headers) + 2 * (len(headers) - 1)))
                 
-        return all_protocols
+                # Add data rows
+                for row in data:
+                    output.append("  ".join(str(cell) for cell in row))
+                    
+                return "\n".join(output)
+        
+        # Convert the data into a standardized format
+        formatted_data = []
+        
+        # Handle the new API response format with status and data fields
+        if isinstance(tvl_data, dict) and "status" in tvl_data and "data" in tvl_data:
+            # This is the new format from pools endpoint
+            if tvl_data["status"] == "success":
+                formatted_data = tvl_data["data"]
+        # Handle the old format (dictionary of pool data)
+        elif isinstance(tvl_data, dict):
+            # This is the old format with pool_id as keys
+            for pool_id, pool_data in tvl_data.items():
+                pool_entry = {
+                    "protocol": pool_data.get("protocol", "N/A"),
+                    "chain": pool_data.get("chain", "N/A"),
+                    "pool_name": pool_data.get("token_pair", "N/A"),
+                    "tvl": pool_data.get("tvl_usd", 0) / 1e6 if isinstance(pool_data.get("tvl_usd"), (int, float)) else 0,
+                    "apy": pool_data.get("apy", 0),
+                    "provider": pool_data.get("provider", "N/A"),
+                    "url": pool_data.get("url", "")
+                }
+                formatted_data.append(pool_entry)
+        # Handle list format
+        elif isinstance(tvl_data, list):
+            formatted_data = tvl_data
+        
+        # Generate output in the requested format
+        if output_format == "json":
+            return json.dumps(formatted_data, indent=2)
+        
+        elif output_format == "csv":
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Write header (without Pool ID)
+            writer.writerow(["Protocol", "Chain", "Pool Name", "TVL (USD)", "APY", "Provider"])
+            
+            # Write data
+            for pool in formatted_data:
+                tvl_value = pool.get('tvl', 0)
+                apy_value = pool.get('apy', 0)
+                
+                # Format TVL with appropriate scale and precision
+                if tvl_value >= 1000:
+                    tvl_formatted = f"${tvl_value:.2f}M"  # Millions with 2 decimal places
+                elif tvl_value >= 1:
+                    tvl_formatted = f"${tvl_value:.4f}M"  # Millions with 4 decimal places for smaller values
+                else:
+                    tvl_formatted = f"${tvl_value * 1000:.2f}K"  # Convert to thousands for very small values
+                
+                # Format APY with appropriate precision
+                if apy_value is None:
+                    apy_formatted = "N/A"
+                elif apy_value < 0.01:
+                    apy_formatted = f"{apy_value:.5f}%"  # 5 decimal places for very small APY
+                elif apy_value < 0.1:
+                    apy_formatted = f"{apy_value:.4f}%"  # 4 decimal places for small APY
+                elif apy_value < 1:
+                    apy_formatted = f"{apy_value:.3f}%"  # 3 decimal places for medium APY
+                else:
+                    apy_formatted = f"{apy_value:.2f}%"  # 2 decimal places for large APY
+                
+                writer.writerow([
+                    pool.get("protocol", "N/A"),
+                    pool.get("chain", "N/A"),
+                    pool.get("pool_name", "N/A"),
+                    tvl_formatted,
+                    apy_formatted,
+                    pool.get("provider", "N/A")
+                ])
+            
+            return output.getvalue()
+        
+        else:  # Default to table format
+            table_data = []
+            
+            for pool in formatted_data:
+                tvl_value = pool.get('tvl', 0)
+                apy_value = pool.get('apy', 0)
+                
+                # Format TVL with appropriate scale and precision
+                if tvl_value >= 1000:
+                    tvl_formatted = f"${tvl_value:.2f}M"  # Millions with 2 decimal places
+                elif tvl_value >= 1:
+                    tvl_formatted = f"${tvl_value:.4f}M"  # Millions with 4 decimal places for smaller values
+                else:
+                    tvl_formatted = f"${tvl_value * 1000:.2f}K"  # Convert to thousands for very small values
+                
+                # Format APY with appropriate precision
+                if apy_value is None:
+                    apy_formatted = "N/A"
+                elif apy_value == 0:
+                    apy_formatted = f"{apy_value:.2f}%"
+                elif apy_value < 0.01:
+                    apy_formatted = f"{apy_value:.5f}%"  # 5 decimal places for very small APY
+                elif apy_value < 0.1:
+                    apy_formatted = f"{apy_value:.4f}%"  # 4 decimal places for small APY
+                elif apy_value < 1:
+                    apy_formatted = f"{apy_value:.3f}%"  # 3 decimal places for medium APY
+                else:
+                    apy_formatted = f"{apy_value:.2f}%"  # 2 decimal places for large APY
+                
+                table_data.append([
+                    pool.get("protocol", "N/A"),
+                    pool.get("chain", "N/A"),
+                    pool.get("pool_name", "N/A"),
+                    tvl_formatted,
+                    apy_formatted,
+                    pool.get("provider", "N/A")
+                ])
+            
+            if not table_data:
+                return "No matching TVL data found."
+                
+            return tabulate(
+                table_data,
+                headers=["Protocol", "Chain", "Pool Name", "TVL (USD)", "APY", "Provider"],
+                tablefmt="pretty"
+            )

@@ -34,11 +34,23 @@ def get_provider(provider_name: str, **kwargs) -> Any:
     if provider_name == "defillama":
         from .defillama import DefiLlamaProvider
         return DefiLlamaProvider(**kwargs)
+    elif provider_name == "kingdom_subgraph":
+        from .kingdom_subgraph import KingdomSubgraphProvider
+        return KingdomSubgraphProvider(**kwargs)
+    elif provider_name == "swapx_subgraph":
+        from .swapx_subgraph import SwapxSubgraphProvider
+        return SwapxSubgraphProvider(**kwargs)
     else:
         raise ValueError(f"Unsupported provider: {provider_name}")
 
-# Avoid circular imports by NOT importing modules here
-# from . import defillama
-# from . import subgraph
-# from . import web3_contract
-# from . import web
+def get_all_providers() -> Dict[str, str]:
+    """
+    Get a dictionary of all available providers.
+    
+    Returns:
+        Dictionary of provider names to descriptions
+    """
+    return {
+        "defillama": "DefiLlama API provider",
+        "kingdom_subgraph": "Kingdom Subgraph GraphQL provider"
+    }
